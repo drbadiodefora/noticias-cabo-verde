@@ -15,12 +15,13 @@ jobs:
         with:
           python-version: '3.10'
       - name: Instalar dependências
-        run: pip install feedparser sendgrid
+        run: pip install feedparser requests
       - name: Executar coletor de notícias
         env:
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
         run: python news_collector.py
       - name: Guardar timestamp
         run: |
