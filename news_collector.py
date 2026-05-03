@@ -85,41 +85,7 @@ def enviar_email(noticias):
         return
 
     assunto = f"📰 {len(noticias)} notícia(s) sobre Cabo Verde – {datetime.now().strftime('%d/%m/%Y')}"
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head><meta charset="UTF-8"></head>
-    <body>
-        <h2>🌍 Notícias sobre Cabo Verde (fontes globais)</h2>
-        <p><strong>{len(noticias)}</strong> notícia(s) desde a última verificação.</p>
-        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width:100%">
-            <thead style="background-color: #f0f0f0;">
-                <tr>
-                    <th>Fonte</th>
-                    <th>Data</th>
-                    <th>Título</th>
-                    <th>Resumo</th>
-                </tr>
-            </thead>
-            <tbody>
-    """
-    for n in noticias:
-        html += f"""
-            <tr>
-                <td>{n['fonte']}</td>
-                <td>{n['data']}</td>
-                <td><a href="{n['link']}">{n['titulo']}</a></td>
-                <td>{n['resumo']}</td>
-            </tr>
-        """
-    html += """
-            </tbody>
-        </table>
-        <p><small>📌 Gerado automaticamente por GitHub Actions.</small></p>
-    </body>
-    </html>
-    """
+    html = ...  # (igual)
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = assunto
@@ -128,12 +94,14 @@ def enviar_email(noticias):
     msg.attach(MIMEText(html, "html"))
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        # Usando porta 587 com TLS
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
             server.login(EMAIL_FROM, EMAIL_PASSWORD)
             server.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
         print("✅ E‑mail enviado.")
     except Exception as e:
-        print(f"❌ Erro ao enviar e‑mail: {e}")
+        print(f"❌ Erro ao enviar: {e}")
 
 # ============================================================
 # EXECUÇÃO PRINCIPAL
