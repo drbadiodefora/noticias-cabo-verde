@@ -1,0 +1,30 @@
+name: Coletor diário de notícias
+
+on:
+  schedule:
+    - cron: '0 6 * * *'           # 6:00 UTC-1 = 6:00 Cabo Verde
+      timezone: "Atlantic/Cape_Verde"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install feedparser
+      - name: Executar coletor
+        env:
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: python news_collector.py
+      - name: Guardar estado
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add last_news_run.txt
+          git commit -m "Atualizar última verificação [skip ci]" || true
+          git push
