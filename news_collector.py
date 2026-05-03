@@ -1,21 +1,21 @@
+# news_collector.py
 import os
 import re
 import feedparser
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, To, Content
-import base64
+import requests
 
 # ============================================================
 # CONFIGURAÇÕES (variáveis de ambiente)
 # ============================================================
+MAILGUN_API_KEY = os.environ.get("MAILGUN_API_KEY")
+MAILGUN_DOMAIN = os.environ.get("MAILGUN_DOMAIN")
 EMAIL_FROM = os.environ.get("EMAIL_FROM")
 EMAIL_TO = os.environ.get("EMAIL_TO")
-SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY")
 
-if not SENDGRID_API_KEY:
-    print("❌ Erro: SENDGRID_API_KEY não configurada.")
+if not MAILGUN_API_KEY or not MAILGUN_DOMAIN:
+    print("❌ Erro: MAILGUN_API_KEY ou MAILGUN_DOMAIN não configurados.")
     exit(1)
 
 # ============================================================
@@ -54,9 +54,12 @@ def coletar_noticias():
 
     for entry in feed.entries:
         pub = extrair_data(entry)
-        if pub is None: continue
-        if pub <= ultima: continue
-        if pub > maior_data: maior_data = pub
+        if pub is None:
+            continue
+        if pub <= ultima:
+            continue
+        if pub > maior_data:
+            maior_data = pub
 
         fonte = entry.get('source', {}).get('title', 'Google News')
         titulo = entry.get('title', 'Sem título')
@@ -65,8 +68,11 @@ def coletar_noticias():
         resumo = titulo[:200]
 
         novas.append({
-            "fonte": fonte, "data": data_str,
-            "titulo": titulo, "link": link, "resumo": resumo
+            "fonte": fonte,
+            "data": data_str,
+            "titulo": titulo,
+            "link": link,
+            "resumo": resumo
         })
         print(f"   ✅ {data_str} - {titulo[:60]}...")
 
@@ -74,7 +80,7 @@ def coletar_noticias():
     return novas
 
 # ============================================================
-# FUNÇÃO DE ENVIO DE EMAIL (ATUALIZADA COM SENDGRID)
+# ENVIO DE E-MAIL VIA MAILGUN
 # ============================================================
 def enviar_email(noticias):
     if not noticias:
@@ -82,13 +88,13 @@ def enviar_email(noticias):
         return
 
     assunto = f"📰 {len(noticias)} notícia(s) sobre Cabo Verde – {datetime.now().strftime('%d/%m/%Y')}"
-    tabela_html = """
+    html = f"""
     <!DOCTYPE html>
     <html>
     <head><meta charset="UTF-8"></head>
     <body>
         <h2>🌍 Notícias sobre Cabo Verde (fontes globais)</h2>
-        <p><strong>{len_noticias}</strong> notícia(s) encontradas.</p>
+        <p><strong>{len(noticias)}</strong> notícia(s) desde a última verificação.</p>
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width:100%">
             <thead style="background-color: #f0f0f0;">
                 <tr>
@@ -101,7 +107,7 @@ def enviar_email(noticias):
             <tbody>
     """
     for n in noticias:
-        tabela_html += f"""
+        html += f"""
             <tr>
                 <td>{n['fonte']}</td>
                 <td>{n['data']}</td>
@@ -109,32 +115,31 @@ def enviar_email(noticias):
                 <td>{n['resumo']}</td>
             </tr>
         """
-    tabela_html += """
+    html += """
             </tbody>
-        </table>
+        <table>
         <p><small>📌 Relatório diário gerado automaticamente.</small></p>
     </body>
     </html>
     """
-    
-    tabela_html = tabela_html.replace("{len_noticias}", str(len(noticias)))
-
-    message = Mail(
-        from_email=EMAIL_FROM,
-        to_emails=EMAIL_TO,
-        subject=assunto,
-        html_content=tabela_html
-    )
 
     try:
-        sg = SendGridAPIClient(SENDGRID_API_KEY)
-        response = sg.send(message)
-        if response.status_code == 202:
-            print("✅ E‑mail enviado com sucesso via SendGrid!")
+        response = requests.post(
+            f"https://api.mailgun.net/v3/{MAILGUN_DOMAIN}/messages",
+            auth=("api", MAILGUN_API_KEY),
+            data={
+                "from": EMAIL_FROM,
+                "to": EMAIL_TO,
+                "subject": assunto,
+                "html": html
+            }
+        )
+        if response.status_code == 200:
+            print("✅ E‑mail enviado com sucesso via Mailgun!")
         else:
-            print(f"❌ Erro inesperado da API SendGrid: Código {response.status_code}")
+            print(f"❌ Erro ao enviar via Mailgun: {response.status_code} - {response.text}")
     except Exception as e:
-        print(f"❌ Erro ao enviar e‑mail via SendGrid: {e}")
+        print(f"❌ Erro na requisição: {e}")
 
 # ============================================================
 # EXECUÇÃO PRINCIPAL
