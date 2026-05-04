@@ -1,8 +1,8 @@
-# news_collector.py (tabela única com 5 colunas)
+# news_collector.py (tabela única, 5 colunas, sem instalação automática)
 import os, re, feedparser, requests, html as html_escape
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from bs4 import BeautifulSoup  # para limpar HTML do resumo
+from bs4 import BeautifulSoup
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 EMAIL_TO = os.environ.get("EMAIL_TO", "drbadiodefora@gmail.com")
@@ -36,7 +36,6 @@ def classificar_titulo(titulo, resumo):
     return "Outros"
 
 def limpar_html(texto):
-    """Remove tags HTML e normaliza espaços."""
     if not texto:
         return ""
     soup = BeautifulSoup(texto, "html.parser")
@@ -99,63 +98,39 @@ def coletar_noticias():
     save_last_run(maior_data if maior_data > ultima else agora)
     return novas
 
-# ============================================================
-# ENVIO DE E-MAIL (TABELA ÚNICA, 5 COLUNAS)
-# ============================================================
 def enviar_email(noticias):
     if not noticias:
         print("Nenhuma notícia nova.")
         return
 
     # Ordenar: primeiro por tema (A-Z), depois por data (mais recente primeiro)
-    noticias_ordenadas = sorted(noticias, key=lambda x: (x["tema"], x["data"]), reverse=False)
-    # O reverse=False para tema, mas a data fica crescente? Queremos data mais recente primeiro.
-    # Como o sort é por (tema, data) ascendente, para inverter a data podemos fazer (tema, -timestamp) mas é mais simples ordenar duas vezes.
-    # Vamos ordenar primeiro por data (mais recente primeiro) e depois estabilizar por tema, mas Python mantém ordem relativa para chaves iguais.
-    # Melhor: ordenar por data decrescente e depois por tema.
     noticias_ordenadas = sorted(noticias, key=lambda x: x["data"], reverse=True)
     noticias_ordenadas = sorted(noticias_ordenadas, key=lambda x: x["tema"])
 
     assunto = f"📰 {len(noticias)} notícias sobre Cabo Verde – {datetime.now().strftime('%d/%m/%Y')}"
-
-    # Construir tabela única
-    html_parts = [
-        "<!DOCTYPE html>",
-        "<html>",
-        "<head><meta charset='UTF-8'></head>",
-        "<body>",
-        f"<h2>🌍 Notícias sobre Cabo Verde (por tema)</h2>",
-        f"<p><strong>{len(noticias)}</strong> notícia(s) nova(s).</p>",
-        '<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width:100%">',
-        '<tr style="background-color:#f0f0f0">',
-        '<th>Categoria/Tema</th>',
-        '<th>Fonte</th>',
-        '<th>Data</th>',
-        '<th>Título</th>',
-        '<th>Resumo</th>',
-        '</tr>'
-    ]
+    html_parts = ["<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body>"]
+    html_parts.append(f"<h2>🌍 Notícias sobre Cabo Verde (por tema)</h2>")
+    html_parts.append(f"<p><strong>{len(noticias)}</strong> notícia(s) nova(s).</p>")
+    html_parts.append('<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width:100%">')
+    html_parts.append('<tr style="background-color:#f0f0f0"><th>Assunto/Tema</th><th>Fonte</th><th>Data</th><th>Título</th><th>Resumo</th></tr>')
 
     for n in noticias_ordenadas:
         tema_esc = html_escape.escape(n['tema'])
         fonte_esc = html_escape.escape(n['fonte'])
-        data_str = n['data_str']
         titulo_esc = html_escape.escape(n['titulo'])
         link_esc = html_escape.escape(n['link'])
         resumo_esc = html_escape.escape(n['resumo'])
-
         html_parts.append(f"<tr>\n")
         html_parts.append(f"<td>{tema_esc}</td>\n")
         html_parts.append(f"<td>{fonte_esc}</td>\n")
-        html_parts.append(f"<td>{data_str}</td>\n")
+        html_parts.append(f"<td>{n['data_str']}</td>\n")
         html_parts.append(f"<td><a href='{link_esc}'>{titulo_esc}</a></td>\n")
         html_parts.append(f"<td>{resumo_esc}</td>\n")
-        html_parts.append(f"</tr>\n")
+        html_parts.append(f"</td>\n")
 
     html_parts.append("</table>")
-    html_parts.append("<p><small>📌 Relatório diário automático. Notícias ordenadas por tema (A-Z) e, dentro do mesmo tema, da mais recente para a mais antiga.</small></p>")
+    html_parts.append("<p><small>📌 Relatório diário automático. Ordenado por tema (A-Z) e, dentro do tema, da notícia mais recente para a mais antiga.</small></p>")
     html_parts.append("</body></html>")
-
     html_final = "\n".join(html_parts)
 
     try:
@@ -178,16 +153,6 @@ def enviar_email(noticias):
 
 if __name__ == "__main__":
     print("🔍 Coletor iniciado...")
-    import sys
-    # Instala BeautifulSoup se necessário (no GitHub Actions já está)
-    try:
-        from bs4 import BeautifulSoup
-    except ImportError:
-        print("📦 Instalando BeautifulSoup...")
-        import subprocess
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "beautifulsoup4"])
-        from bs4 import BeautifulSoup
-
     noticias = coletar_noticias()
     enviar_email(noticias)
     print("🏁 Fim.")
