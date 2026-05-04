@@ -1,9 +1,16 @@
-# news_collector.py (tabela única, 5 colunas, sem instalação automática)
-import os, re, feedparser, requests, html as html_escape
+# news_collector.py (versão final com copyright)
+import os
+import re
+import feedparser
+import requests
+import html as html_escape
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from bs4 import BeautifulSoup
 
+# ============================================================
+# CONFIGURAÇÕES
+# ============================================================
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 EMAIL_TO = os.environ.get("EMAIL_TO", "drbadiodefora@gmail.com")
 if not RESEND_API_KEY:
@@ -14,7 +21,7 @@ GOOGLE_NEWS_URL = "https://news.google.com/rss/search?q=Cabo+Verde+OR+Cape+Verde
 LAST_RUN_FILE = "last_news_run.txt"
 
 # ============================================================
-# DEFINIÇÃO DE TEMAS
+# DEFINIÇÃO DE TEMAS (CATEGORIAS)
 # ============================================================
 TEMAS = {
     "Política": ["eleição", "eleições", "governo", "parlamento", "presidente", "primeiro-ministro", "partido", "deputado", "assembleia", "voto", "campanha", "mpd", "paicv", "ucid"],
@@ -29,10 +36,10 @@ TEMAS = {
 
 def classificar_titulo(titulo, resumo):
     texto = f"{titulo} {resumo}".lower()
-    for tema, palavras in TEMAS.items():
+    for categoria, palavras in TEMAS.items():
         for palavra in palavras:
             if palavra in texto:
-                return tema
+                return categoria
     return "Outros"
 
 def limpar_html(texto):
@@ -77,60 +84,70 @@ def coletar_noticias():
         titulo = entry.get('title', 'Sem título')
         resumo_raw = entry.get('summary', '')
         if resumo_raw:
-            resumo_limpo = limpar_html(resumo_raw)[:300]
+            resumo_limpo = limpar_html(resumo_raw)[:200]
         else:
             resumo_limpo = titulo[:200]
 
-        fonte = entry.get('source', {}).get('title', 'Google News')
         link = entry.get('link', '')
         data_str = pub.strftime("%d/%m/%Y %H:%M")
-        tema = classificar_titulo(titulo, resumo_limpo)
+        categoria = classificar_titulo(titulo, resumo_limpo)
 
         novas.append({
-            "tema": tema,
-            "fonte": fonte,
+            "categoria": categoria,
             "data": pub,
             "data_str": data_str,
             "titulo": titulo,
-            "link": link,
-            "resumo": resumo_limpo
+            "link": link
         })
     save_last_run(maior_data if maior_data > ultima else agora)
     return novas
 
+# ============================================================
+# ENVIO DE E-MAIL (TABELA 3 COLUNAS)
+# ============================================================
 def enviar_email(noticias):
     if not noticias:
         print("Nenhuma notícia nova.")
         return
 
-    # Ordenar: primeiro por tema (A-Z), depois por data (mais recente primeiro)
+    # Ordenar: por categoria (A-Z) e dentro da categoria por data (mais recente primeiro)
     noticias_ordenadas = sorted(noticias, key=lambda x: x["data"], reverse=True)
-    noticias_ordenadas = sorted(noticias_ordenadas, key=lambda x: x["tema"])
+    noticias_ordenadas = sorted(noticias_ordenadas, key=lambda x: x["categoria"])
 
-    assunto = f"📰 {len(noticias)} notícias sobre Cabo Verde – {datetime.now().strftime('%d/%m/%Y')}"
-    html_parts = ["<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body>"]
-    html_parts.append(f"<h2>🌍 Notícias sobre Cabo Verde (por tema)</h2>")
-    html_parts.append(f"<p><strong>{len(noticias)}</strong> notícia(s) nova(s).</p>")
-    html_parts.append('<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width:100%">')
-    html_parts.append('<tr style="background-color:#f0f0f0"><th>Assunto/Tema</th><th>Fonte</th><th>Data</th><th>Título</th><th>Resumo</th></tr>')
+    assunto = f"Notícias de Cabo Verde - {datetime.now().strftime('%d/%m/%Y')}"
+    data_hoje = datetime.now().strftime("%d/%m/%Y")
+
+    html_parts = [
+        "<!DOCTYPE html>",
+        "<html>",
+        "<head><meta charset='UTF-8'></head>",
+        "<body>",
+        f"<h2>🌍 Notícias sobre Cabo Verde</h2>",
+        f"<p><strong>{len(noticias)}</strong> notícia(s) nova(s) – {data_hoje}</p>",
+        '<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width:100%">',
+        '<tr style="background-color:#f0f0f0">',
+        '<th>Categoria</th>',
+        '<th>Data</th>',
+        '<th>Título</th>',
+        '</tr>'
+    ]
 
     for n in noticias_ordenadas:
-        tema_esc = html_escape.escape(n['tema'])
-        fonte_esc = html_escape.escape(n['fonte'])
+        cat_esc = html_escape.escape(n['categoria'])
+        data_str = n['data_str']
         titulo_esc = html_escape.escape(n['titulo'])
         link_esc = html_escape.escape(n['link'])
-        resumo_esc = html_escape.escape(n['resumo'])
         html_parts.append(f"<tr>\n")
-        html_parts.append(f"<td>{tema_esc}</td>\n")
-        html_parts.append(f"<td>{fonte_esc}</td>\n")
-        html_parts.append(f"<td>{n['data_str']}</td>\n")
+        html_parts.append(f"<td>{cat_esc}</td>\n")
+        html_parts.append(f"<td>{data_str}</td>\n")
         html_parts.append(f"<td><a href='{link_esc}'>{titulo_esc}</a></td>\n")
-        html_parts.append(f"<td>{resumo_esc}</td>\n")
-        html_parts.append(f"</td>\n")
+        html_parts.append(f"</tr>\n")
 
     html_parts.append("</table>")
-    html_parts.append("<p><small>📌 Relatório diário automático. Ordenado por tema (A-Z) e, dentro do tema, da notícia mais recente para a mais antiga.</small></p>")
+    # Copyright com símbolo ©
+    html_parts.append("<p>Rui Sanches &copy; 2026 - todos os direitos reservados.</p>")
     html_parts.append("</body></html>")
+
     html_final = "\n".join(html_parts)
 
     try:
@@ -151,6 +168,9 @@ def enviar_email(noticias):
     except Exception as e:
         print(f"❌ Exceção: {e}")
 
+# ============================================================
+# EXECUÇÃO PRINCIPAL
+# ============================================================
 if __name__ == "__main__":
     print("🔍 Coletor iniciado...")
     noticias = coletar_noticias()
