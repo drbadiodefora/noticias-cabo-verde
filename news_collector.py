@@ -1,7 +1,13 @@
-# news_collector.py
-import os, feedparser, json
+# news_collector.py (Resend API - final)
+import os, feedparser, requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+EMAIL_TO = os.environ.get("EMAIL_TO", "drbadiodefora@gmail.com")
+if not RESEND_API_KEY:
+    print("❌ RESEND_API_KEY não configurada.")
+    exit(1)
 
 GOOGLE_NEWS_URL = "https://news.google.com/rss/search?q=Cabo+Verde+OR+Cape+Verde+OR+Cap-Vert&hl=pt&gl=CV&ceid=CV:pt"
 LAST_RUN_FILE = "last_news_run.txt"
@@ -18,7 +24,7 @@ def save_last_run(dt):
         f.write(dt.isoformat())
 
 def extrair_data(entry):
-    if 'published_parsed' in entry and entry.published_parsed:
+    if 'published_parsed' in entry:
         return datetime(*entry.published_parsed[:6], tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo("Atlantic/Cape_Verde"))
     return None
 
@@ -44,23 +50,36 @@ def coletar_noticias():
     save_last_run(maior_data if maior_data > ultima else agora)
     return novas
 
-def gerar_html(noticias):
+def enviar_email(noticias):
     if not noticias:
-        return "<p>Nenhuma notícia nova.</p>"
-    html = f"<h2>🌍 Notícias sobre Cabo Verde</h2><p>{len(noticias)} notícia(s) desde a última verificação.</p>"
+        print("Nenhuma notícia nova.")
+        return
+    assunto = f"📰 {len(noticias)} notícias sobre Cabo Verde – {datetime.now().strftime('%d/%m/%Y')}"
+    html = f"<h2>🌍 Notícias sobre Cabo Verde</h2><p>{len(noticias)} notícia(s) nova(s).</p>"
     html += '<table border="1" cellpadding="8">'
     for n in noticias:
         html += f"<tr><td>{n['fonte']}</td><td>{n['data']}</td><td><a href='{n['link']}'>{n['titulo']}</a></td><td>{n['resumo']}</td></tr>"
     html += "</table>"
-    return html
+    try:
+        resp = requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "from": "onboarding@resend.dev",  # domínio sandbox do Resend
+                "to": [EMAIL_TO],
+                "subject": assunto,
+                "html": html
+            }
+        )
+        if resp.status_code == 200:
+            print("✅ E‑mail enviado via Resend!")
+        else:
+            print(f"❌ Erro: {resp.status_code} - {resp.text}")
+    except Exception as e:
+        print(f"❌ Exceção: {e}")
 
 if __name__ == "__main__":
+    print("🔍 Coletor iniciado...")
     noticias = coletar_noticias()
-    html_content = gerar_html(noticias)
-    # Guarda o conteúdo em ficheiro para a Action ler
-    with open("email_content.html", "w", encoding="utf-8") as f:
-        f.write(html_content)
-    # Também guarda o assunto e o número de notícias
-    with open("email_subject.txt", "w", encoding="utf-8") as f:
-        f.write(f"📰 {len(noticias)} notícias sobre Cabo Verde – {datetime.now().strftime('%d/%m/%Y')}")
-    print("✅ Conteúdo preparado.")
+    enviar_email(noticias)
+    print("🏁 Fim.")
