@@ -1,4 +1,4 @@
-# news_collector.py (tabela com largura otimizada: Categoria ~20%, Data ~15%, Título ~65%)
+# news_collector.py (introdução personalizada + coluna Data compacta)
 import os
 import re
 import feedparser
@@ -103,7 +103,7 @@ def coletar_noticias():
     return novas
 
 # ============================================================
-# ENVIO DE E-MAIL (TABELA COM LARGURAS PROPORCIONAIS)
+# ENVIO DE E-MAIL (COM INTRODUÇÃO E COLUNA DATA COMPACTA)
 # ============================================================
 def enviar_email(noticias):
     if not noticias:
@@ -116,7 +116,7 @@ def enviar_email(noticias):
     assunto = f"Notícias de Cabo Verde - {datetime.now().strftime('%d/%m/%Y')}"
     data_hoje = datetime.now().strftime("%d/%m/%Y")
 
-    # Estilo com larguras fixas: Categoria 20%, Data 15%, Título 65%
+    # Estilo: coluna Data mais compacta (width: 12%, min-width: 105px)
     style = """
     <style>
         .news-table {
@@ -136,16 +136,21 @@ def enviar_email(noticias):
             width: 20%;
         }
         .col-data {
-            width: 15%;
+            width: 12%;
             white-space: nowrap;
-            min-width: 130px;
+            min-width: 105px;
         }
         .col-titulo {
-            width: 65%;
+            width: 68%;
             word-wrap: break-word;
             white-space: normal;
         }
     </style>
+    """
+
+    # Texto de introdução personalizado
+    introducao = """
+    <p><strong>Notícias de Cabo Verde</strong> é um projeto IA da autoria de <strong>Rui Sanches (drbadiodefora)</strong> que consiste em recolher e ordenar notícias em todo o mundo sobre Cabo Verde e enviar, diariamente às 6h (hora local) por email ao destinatário por ordem de assunto e data.</p>
     """
 
     html_parts = [
@@ -155,7 +160,8 @@ def enviar_email(noticias):
         style,
         "</head>",
         "<body>",
-        f"<h2>🌍 Notícias sobre Cabo Verde</h2>",
+        f"<h2>🌍 Notícias de Cabo Verde</h2>",
+        introducao,
         f"<p><strong>{len(noticias)}</strong> notícia(s) nova(s) – {data_hoje}</p>",
         '<table class="news-table">',
         '<tr>',
