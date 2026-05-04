@@ -1,5 +1,5 @@
-# news_collector.py (categorização + ordenação por data + HTML seguro)
-import os, re, feedparser, requests, html
+# news_collector.py (corrigido - sem conflito de nomes)
+import os, re, feedparser, requests, html as html_escape
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from collections import defaultdict
@@ -14,7 +14,7 @@ GOOGLE_NEWS_URL = "https://news.google.com/rss/search?q=Cabo+Verde+OR+Cape+Verde
 LAST_RUN_FILE = "last_news_run.txt"
 
 # ============================================================
-# DEFINIÇÃO DE TEMAS (palavras‑chave)
+# DEFINIÇÃO DE TEMAS
 # ============================================================
 TEMAS = {
     "Política": ["eleição", "eleições", "governo", "parlamento", "presidente", "primeiro-ministro", "partido", "deputado", "assembleia", "voto", "campanha", "mpd", "paicv", "ucid"],
@@ -77,7 +77,7 @@ def coletar_noticias():
 
         novas.append({
             "fonte": fonte,
-            "data": pub,               # datetime object
+            "data": pub,
             "data_str": data_str,
             "titulo": titulo,
             "link": link,
@@ -88,53 +88,50 @@ def coletar_noticias():
     return novas
 
 # ============================================================
-# ENVIO DE E-MAIL
+# ENVIO DE E-MAIL (CORRIGIDO)
 # ============================================================
 def enviar_email(noticias):
     if not noticias:
         print("Nenhuma notícia nova.")
         return
 
-    # Agrupar por tema
     grupos = defaultdict(list)
     for n in noticias:
         grupos[n["tema"]].append(n)
 
-    # Ordenar cada grupo por data (mais recente primeiro = Z-A)
+    # Ordenar cada grupo por data (mais recente primeiro = reverse)
     for tema in grupos:
         grupos[tema].sort(key=lambda x: x["data"], reverse=True)
 
-    # Ordem dos temas: alfabética crescente (A-Z)
-    temas_ordenados = sorted(grupos.keys())
+    temas_ordenados = sorted(grupos.keys())  # A-Z
 
     assunto = f"📰 {len(noticias)} notícias sobre Cabo Verde – {datetime.now().strftime('%d/%m/%Y')}"
 
-    # Montar HTML com escape de caracteres especiais
-    html_parts = [
-        "<!DOCTYPE html>",
-        "<html>",
-        "<head><meta charset='UTF-8'></head>",
-        "<body>",
-        f"<h2>🌍 Notícias sobre Cabo Verde (por tema)</h2>",
-        f"<p><strong>{len(noticias)}</strong> notícia(s) nova(s).</p>"
-    ]
+    # Construir HTML (variável chamada 'conteudo_html' para não conflitar)
+    conteudo_html = []
+    conteudo_html.append("<!DOCTYPE html>")
+    conteudo_html.append("<html>")
+    conteudo_html.append("<head><meta charset='UTF-8'></head>")
+    conteudo_html.append("<body>")
+    conteudo_html.append(f"<h2>🌍 Notícias sobre Cabo Verde (por tema)</h2>")
+    conteudo_html.append(f"<p><strong>{len(noticias)}</strong> notícia(s) nova(s).</p>")
+
     for tema in temas_ordenados:
         noticias_tema = grupos[tema]
-        html_parts.append(f"<h3>{tema} ({len(noticias_tema)})</h3>")
-        html_parts.append('<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width:100%">')
-        html_parts.append('<tr style="background-color:#f0f0f0"><th>Fonte</th><th>Data</th><th>Título</th><th>Resumo</th></tr>')
+        conteudo_html.append(f"<h3>{tema} ({len(noticias_tema)})</h3>")
+        conteudo_html.append('<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width:100%">')
+        conteudo_html.append('<tr style="background-color:#f0f0f0"><th>Fonte</th><th>Data</th><th>Título</th><th>Resumo</th></tr>')
         for n in noticias_tema:
-            # Escapa caracteres problemáticos
-            fonte_esc = html.escape(n['fonte'])
-            titulo_esc = html.escape(n['titulo'])
-            resumo_esc = html.escape(n['resumo'])
-            link_esc = html.escape(n['link'])
-            html_parts.append(f"<tr><td>{fonte_esc}</td><td>{n['data_str']}</td><td><a href='{link_esc}'>{titulo_esc}</a></td><td>{resumo_esc}</td></tr>")
-        html_parts.append("</table><br>")
-    html_parts.append("<p><small>📌 Relatório diário automático. Notícias agrupadas por tema (A-Z) e ordenadas da mais recente para a mais antiga.</small></p>")
-    html_parts.append("</body></html>")
+            fonte_esc = html_escape.escape(n['fonte'])
+            titulo_esc = html_escape.escape(n['titulo'])
+            resumo_esc = html_escape.escape(n['resumo'])
+            link_esc = html_escape.escape(n['link'])
+            conteudo_html.append(f"<tr>\n<td>{fonte_esc}</td>\n<td>{n['data_str']}</td>\n<td><a href='{link_esc}'>{titulo_esc}</a></td>\n<td>{resumo_esc}</td>\n</tr>")
+        conteudo_html.append("</table><br>")
 
-    html = "\n".join(html_parts)
+    conteudo_html.append("<p><small>📌 Relatório diário automático. Notícias agrupadas por tema (A-Z) e ordenadas da mais recente para a mais antiga.</small></p>")
+    conteudo_html.append("</body></html>")
+    html_final = "\n".join(conteudo_html)
 
     try:
         resp = requests.post(
@@ -144,7 +141,7 @@ def enviar_email(noticias):
                 "from": "onboarding@resend.dev",
                 "to": [EMAIL_TO],
                 "subject": assunto,
-                "html": html
+                "html": html_final
             }
         )
         if resp.status_code == 200:
