@@ -1,4 +1,4 @@
-# news_collector.py (introdução personalizada + coluna Data compacta)
+# news_collector.py (categoria reduzida para 16%)
 import os
 import re
 import feedparser
@@ -8,9 +8,6 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from bs4 import BeautifulSoup
 
-# ============================================================
-# CONFIGURAÇÕES
-# ============================================================
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 EMAIL_TO = os.environ.get("EMAIL_TO", "drbadiodefora@gmail.com")
 if not RESEND_API_KEY:
@@ -20,9 +17,6 @@ if not RESEND_API_KEY:
 GOOGLE_NEWS_URL = "https://news.google.com/rss/search?q=Cabo+Verde+OR+Cape+Verde+OR+Cap-Vert&hl=pt&gl=CV&ceid=CV:pt"
 LAST_RUN_FILE = "last_news_run.txt"
 
-# ============================================================
-# DEFINIÇÃO DE TEMAS (CATEGORIAS)
-# ============================================================
 TEMAS = {
     "Política": ["eleição", "eleições", "governo", "parlamento", "presidente", "primeiro-ministro", "partido", "deputado", "assembleia", "voto", "campanha", "mpd", "paicv", "ucid"],
     "Economia": ["economia", "finanças", "empresa", "negócio", "turismo", "investimento", "crescimento", "pib", "inflação", "desemprego", "salário", "comércio", "banco"],
@@ -48,9 +42,6 @@ def limpar_html(texto):
     soup = BeautifulSoup(texto, "html.parser")
     return ' '.join(soup.get_text().split())
 
-# ============================================================
-# COLETA DE NOTÍCIAS
-# ============================================================
 def load_last_run():
     try:
         with open(LAST_RUN_FILE, "r") as f:
@@ -102,9 +93,6 @@ def coletar_noticias():
     save_last_run(maior_data if maior_data > ultima else agora)
     return novas
 
-# ============================================================
-# ENVIO DE E-MAIL (COM INTRODUÇÃO E COLUNA DATA COMPACTA)
-# ============================================================
 def enviar_email(noticias):
     if not noticias:
         print("Nenhuma notícia nova.")
@@ -116,7 +104,7 @@ def enviar_email(noticias):
     assunto = f"Notícias de Cabo Verde - {datetime.now().strftime('%d/%m/%Y')}"
     data_hoje = datetime.now().strftime("%d/%m/%Y")
 
-    # Estilo: coluna Data mais compacta (width: 12%, min-width: 105px)
+    # Estilo com Categoria reduzida para 16% (80% do tamanho anterior de 20%)
     style = """
     <style>
         .news-table {
@@ -133,7 +121,7 @@ def enviar_email(noticias):
             text-align: left;
         }
         .col-categoria {
-            width: 20%;
+            width: 16%;
         }
         .col-data {
             width: 12%;
@@ -141,16 +129,15 @@ def enviar_email(noticias):
             min-width: 105px;
         }
         .col-titulo {
-            width: 68%;
+            width: 72%;
             word-wrap: break-word;
             white-space: normal;
         }
     </style>
     """
 
-    # Texto de introdução personalizado
     introducao = """
-    <p><strong>Notícias de Cabo Verde</strong> é um projeto IA da autoria de <strong>Rui Sanches (drbadiodefora)</strong> que consiste em recolher e ordenar notícias em todo o mundo sobre Cabo Verde e enviar, diariamente às 6h (hora local) por email ao destinatário por ordem de assunto e data.</p>
+    <p><strong>Notícias de Cabo Verde</strong> é um projeto IA da autoria de <strong>Rui Sanches (drbadiodefora)</strong> que consiste em recolher notícias ao redor do mundo sobre Cabo Verde e enviar por email ao destinatário por ordem de assunto e data.</p>
     """
 
     html_parts = [
