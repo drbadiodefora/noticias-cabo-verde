@@ -1,4 +1,4 @@
-# news_collector.py (versão final com copyright)
+# news_collector.py (tabela com largura otimizada: Categoria ~20%, Data ~15%, Título ~65%)
 import os
 import re
 import feedparser
@@ -103,32 +103,65 @@ def coletar_noticias():
     return novas
 
 # ============================================================
-# ENVIO DE E-MAIL (TABELA 3 COLUNAS)
+# ENVIO DE E-MAIL (TABELA COM LARGURAS PROPORCIONAIS)
 # ============================================================
 def enviar_email(noticias):
     if not noticias:
         print("Nenhuma notícia nova.")
         return
 
-    # Ordenar: por categoria (A-Z) e dentro da categoria por data (mais recente primeiro)
     noticias_ordenadas = sorted(noticias, key=lambda x: x["data"], reverse=True)
     noticias_ordenadas = sorted(noticias_ordenadas, key=lambda x: x["categoria"])
 
     assunto = f"Notícias de Cabo Verde - {datetime.now().strftime('%d/%m/%Y')}"
     data_hoje = datetime.now().strftime("%d/%m/%Y")
 
+    # Estilo com larguras fixas: Categoria 20%, Data 15%, Título 65%
+    style = """
+    <style>
+        .news-table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        .news-table th, .news-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            vertical-align: top;
+        }
+        .news-table th {
+            background-color: #f0f0f0;
+            text-align: left;
+        }
+        .col-categoria {
+            width: 20%;
+        }
+        .col-data {
+            width: 15%;
+            white-space: nowrap;
+            min-width: 130px;
+        }
+        .col-titulo {
+            width: 65%;
+            word-wrap: break-word;
+            white-space: normal;
+        }
+    </style>
+    """
+
     html_parts = [
         "<!DOCTYPE html>",
         "<html>",
-        "<head><meta charset='UTF-8'></head>",
+        "<head><meta charset='UTF-8'>",
+        style,
+        "</head>",
         "<body>",
         f"<h2>🌍 Notícias sobre Cabo Verde</h2>",
         f"<p><strong>{len(noticias)}</strong> notícia(s) nova(s) – {data_hoje}</p>",
-        '<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width:100%">',
-        '<tr style="background-color:#f0f0f0">',
-        '<th>Categoria</th>',
-        '<th>Data</th>',
-        '<th>Título</th>',
+        '<table class="news-table">',
+        '<tr>',
+        '<th class="col-categoria">Categoria</th>',
+        '<th class="col-data">Data</th>',
+        '<th class="col-titulo">Título</th>',
         '</tr>'
     ]
 
@@ -138,13 +171,12 @@ def enviar_email(noticias):
         titulo_esc = html_escape.escape(n['titulo'])
         link_esc = html_escape.escape(n['link'])
         html_parts.append(f"<tr>\n")
-        html_parts.append(f"<td>{cat_esc}</td>\n")
-        html_parts.append(f"<td>{data_str}</td>\n")
-        html_parts.append(f"<td><a href='{link_esc}'>{titulo_esc}</a></td>\n")
+        html_parts.append(f"<td class='col-categoria'>{cat_esc}</td>\n")
+        html_parts.append(f"<td class='col-data'>{data_str}</td>\n")
+        html_parts.append(f"<td class='col-titulo'><a href='{link_esc}'>{titulo_esc}</a></td>\n")
         html_parts.append(f"</tr>\n")
 
     html_parts.append("</table>")
-    # Copyright com símbolo ©
     html_parts.append("<p>Rui Sanches &copy; 2026 - todos os direitos reservados.</p>")
     html_parts.append("</body></html>")
 
@@ -168,9 +200,6 @@ def enviar_email(noticias):
     except Exception as e:
         print(f"❌ Exceção: {e}")
 
-# ============================================================
-# EXECUÇÃO PRINCIPAL
-# ============================================================
 if __name__ == "__main__":
     print("🔍 Coletor iniciado...")
     noticias = coletar_noticias()
