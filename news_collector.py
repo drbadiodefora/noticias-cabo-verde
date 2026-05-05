@@ -1,5 +1,9 @@
-# news_collector.py (múltiplos feeds RSS)
-import os, re, feedparser, requests, html as html_escape
+# news_collector.py (com coluna Fonte)
+import os
+import re
+import feedparser
+import requests
+import html as html_escape
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from bs4 import BeautifulSoup
@@ -14,24 +18,24 @@ if not RESEND_API_KEY:
 LAST_RUN_FILE = "last_news_run.txt"
 
 # ============================================================
-# LISTA DE FEEDS (inclui Google News + fontes cabo-verdianas)
+# LISTA DE FEEDS
 # ============================================================
 FEEDS = [
-    {"url": "https://news.google.com/rss/search?q=Cabo+Verde+OR+Cape+Verde+OR+Cap-Vert&hl=pt&gl=CV&ceid=CV:pt", "nome": "Google News", "tipo": "global"},
-    {"url": "https://www.inforpress.cv/rss", "nome": "Inforpress", "tipo": "local"},
-    {"url": "https://www.expressodasilhas.cv/feed", "nome": "Expresso das Ilhas", "tipo": "local"},
-    {"url": "https://www.rtc.cv/feed", "nome": "RTC", "tipo": "local"},
-    {"url": "https://www.anacao.cv/feed", "nome": "A Nação", "tipo": "local"},
-    {"url": "https://www.oceanpress.cv/feed", "nome": "Oceanpress", "tipo": "local"},
-    {"url": "https://noticias.sapo.cv/rss", "nome": "Sapo Notícias CV", "tipo": "local"},
-    {"url": "https://www.bbc.com/portuguese/africa/index.xml", "nome": "BBC África (português)", "tipo": "internacional"},
-    {"url": "https://rss.dw.com/rdf/rss-por-africa", "nome": "DW África", "tipo": "internacional"},
-    {"url": "https://www.voaportugues.com/api/zigbee_news", "nome": "VOA Português", "tipo": "internacional"},
-    {"url": "https://www.france24.com/pt/africa/rss", "nome": "France 24 África", "tipo": "internacional"},
+    {"url": "https://news.google.com/rss/search?q=Cabo+Verde+OR+Cape+Verde+OR+Cap-Vert&hl=pt&gl=CV&ceid=CV:pt", "nome": "Google News"},
+    {"url": "https://www.inforpress.cv/rss", "nome": "Inforpress"},
+    {"url": "https://www.expressodasilhas.cv/feed", "nome": "Expresso das Ilhas"},
+    {"url": "https://www.rtc.cv/feed", "nome": "RTC"},
+    {"url": "https://www.anacao.cv/feed", "nome": "A Nação"},
+    {"url": "https://www.oceanpress.cv/feed", "nome": "Oceanpress"},
+    {"url": "https://noticias.sapo.cv/rss", "nome": "Sapo Notícias CV"},
+    {"url": "https://www.bbc.com/portuguese/africa/index.xml", "nome": "BBC África (português)"},
+    {"url": "https://rss.dw.com/rdf/rss-por-africa", "nome": "DW África"},
+    {"url": "https://www.voaportugues.com/api/zigbee_news", "nome": "VOA Português"},
+    {"url": "https://www.france24.com/pt/africa/rss", "nome": "France 24 África"},
 ]
 
 # ============================================================
-# DEFINIÇÃO DE TEMAS (mesmo)
+# TEMAS
 # ============================================================
 TEMAS = {
     "Política": ["eleição", "eleições", "governo", "parlamento", "presidente", "primeiro-ministro", "partido", "deputado", "assembleia", "voto", "campanha", "mpd", "paicv", "ucid"],
@@ -58,9 +62,6 @@ def limpar_html(texto):
     soup = BeautifulSoup(texto, "html.parser")
     return ' '.join(soup.get_text().split())
 
-# ============================================================
-# GERENCIAMENTO DE ÚLTIMA EXECUÇÃO
-# ============================================================
 def load_last_run():
     try:
         with open(LAST_RUN_FILE, "r") as f:
@@ -77,9 +78,6 @@ def extrair_data(entry):
         return datetime(*entry.published_parsed[:6], tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo("Atlantic/Cape_Verde"))
     return None
 
-# ============================================================
-# COLETA DE NOTÍCIAS (MÚLTIPLOS FEEDS)
-# ============================================================
 def coletar_noticias():
     ultima = load_last_run()
     agora = datetime.now(ZoneInfo("Atlantic/Cape_Verde"))
@@ -134,15 +132,11 @@ def coletar_noticias():
     save_last_run(maior_data if maior_data > ultima else agora)
     return todas
 
-# ============================================================
-# ENVIO DE E-MAIL (MESMA FORMATAÇÃO)
-# ============================================================
 def enviar_email(noticias):
     if not noticias:
         print("Nenhuma notícia nova.")
         return
 
-    # Ordenar: por categoria (A-Z) e dentro por data (mais recente primeiro)
     noticias_ordenadas = sorted(noticias, key=lambda x: x["data"], reverse=True)
     noticias_ordenadas = sorted(noticias_ordenadas, key=lambda x: x["categoria"])
 
@@ -154,9 +148,10 @@ def enviar_email(noticias):
         .news-table { border-collapse: collapse; width: 100%; }
         .news-table th, .news-table td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
         .news-table th { background-color: #f0f0f0; text-align: left; }
-        .col-categoria { width: 16%; }
+        .col-categoria { width: 15%; }
         .col-data { width: 12%; white-space: nowrap; min-width: 105px; }
-        .col-titulo { width: 72%; word-wrap: break-word; white-space: normal; }
+        .col-fonte { width: 18%; }
+        .col-titulo { width: 55%; word-wrap: break-word; white-space: normal; }
     </style>
     """
 
@@ -169,17 +164,18 @@ def enviar_email(noticias):
         f"<h2>🌍 Notícias de Cabo Verde</h2>", introducao,
         f"<p><strong>{len(noticias)}</strong> notícia(s) nova(s) – {data_hoje}</p>",
         '<table class="news-table">',
-        '<tr><th class="col-categoria">Categoria</th><th class="col-data">Data</th><th class="col-titulo">Título</th></tr>'
+        '<tr><th class="col-categoria">Categoria</th><th class="col-data">Data</th><th class="col-fonte">Fonte</th><th class="col-titulo">Título</th></tr>'
     ]
 
     for n in noticias_ordenadas:
         cat_esc = html_escape.escape(n['categoria'])
         data_str = n['data_str']
+        fonte_esc = html_escape.escape(n['fonte'])
         titulo_esc = html_escape.escape(n['titulo'])
         link_esc = html_escape.escape(n['link'])
-        html_parts.append(f"<tr><td class='col-categoria'>{cat_esc}</td><td class='col-data'>{data_str}</td><td class='col-titulo'><a href='{link_esc}'>{titulo_esc}</a></td></tr>")
+        html_parts.append(f"<tr><td class='col-categoria'>{cat_esc}</td><td class='col-data'>{data_str}</td><td class='col-fonte'>{fonte_esc}</td><td class='col-titulo'><a href='{link_esc}'>{titulo_esc}</a></td></tr>")
 
-    html_parts.append("<table><p>Rui Sanches &copy; 2026 - todos os direitos reservados.</p></body></html>")
+    html_parts.append("</table><p>Rui Sanches &copy; 2026 - todos os direitos reservados.</p></body></html>")
     html_final = "\n".join(html_parts)
 
     try:
