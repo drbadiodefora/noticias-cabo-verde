@@ -156,7 +156,7 @@ def enviar_email(noticias):
     """
 
     introducao = """
-    <p><strong>Notícias de Cabo Verde</strong> é um projeto IA da autoria de <strong>Rui Sanches (drbadiodefora)</strong> que consiste em recolher e ordenar notícias em todo o mundo sobre Cabo Verde e enviar por email ao destinatário por ordem de assunto e data.</p>
+    <p><strong>Notícias de Cabo Verde</strong> é um projeto IA da autoria de <strong>Rui Sanches (drbadiodefora)</strong> que consiste em recolher, organizar e disponibilizar notícias em todo o mundo sobre Cabo Verde.</p>
     """
 
     html_parts = [
