@@ -1,12 +1,9 @@
-# news_collector.py (categoria reduzida para 16%)
-import os
-import re
-import feedparser
-import requests
-import html as html_escape
+# news_collector.py (múltiplos feeds RSS)
+import os, re, feedparser, requests, html as html_escape
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from bs4 import BeautifulSoup
+from collections import defaultdict
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 EMAIL_TO = os.environ.get("EMAIL_TO", "drbadiodefora@gmail.com")
@@ -14,9 +11,28 @@ if not RESEND_API_KEY:
     print("❌ RESEND_API_KEY não configurada.")
     exit(1)
 
-GOOGLE_NEWS_URL = "https://news.google.com/rss/search?q=Cabo+Verde+OR+Cape+Verde+OR+Cap-Vert&hl=pt&gl=CV&ceid=CV:pt"
 LAST_RUN_FILE = "last_news_run.txt"
 
+# ============================================================
+# LISTA DE FEEDS (inclui Google News + fontes cabo-verdianas)
+# ============================================================
+FEEDS = [
+    {"url": "https://news.google.com/rss/search?q=Cabo+Verde+OR+Cape+Verde+OR+Cap-Vert&hl=pt&gl=CV&ceid=CV:pt", "nome": "Google News", "tipo": "global"},
+    {"url": "https://www.inforpress.cv/rss", "nome": "Inforpress", "tipo": "local"},
+    {"url": "https://www.expressodasilhas.cv/feed", "nome": "Expresso das Ilhas", "tipo": "local"},
+    {"url": "https://www.rtc.cv/feed", "nome": "RTC", "tipo": "local"},
+    {"url": "https://www.anacao.cv/feed", "nome": "A Nação", "tipo": "local"},
+    {"url": "https://www.oceanpress.cv/feed", "nome": "Oceanpress", "tipo": "local"},
+    {"url": "https://noticias.sapo.cv/rss", "nome": "Sapo Notícias CV", "tipo": "local"},
+    {"url": "https://www.bbc.com/portuguese/africa/index.xml", "nome": "BBC África (português)", "tipo": "internacional"},
+    {"url": "https://rss.dw.com/rdf/rss-por-africa", "nome": "DW África", "tipo": "internacional"},
+    {"url": "https://www.voaportugues.com/api/zigbee_news", "nome": "VOA Português", "tipo": "internacional"},
+    {"url": "https://www.france24.com/pt/africa/rss", "nome": "France 24 África", "tipo": "internacional"},
+]
+
+# ============================================================
+# DEFINIÇÃO DE TEMAS (mesmo)
+# ============================================================
 TEMAS = {
     "Política": ["eleição", "eleições", "governo", "parlamento", "presidente", "primeiro-ministro", "partido", "deputado", "assembleia", "voto", "campanha", "mpd", "paicv", "ucid"],
     "Economia": ["economia", "finanças", "empresa", "negócio", "turismo", "investimento", "crescimento", "pib", "inflação", "desemprego", "salário", "comércio", "banco"],
@@ -42,6 +58,9 @@ def limpar_html(texto):
     soup = BeautifulSoup(texto, "html.parser")
     return ' '.join(soup.get_text().split())
 
+# ============================================================
+# GERENCIAMENTO DE ÚLTIMA EXECUÇÃO
+# ============================================================
 def load_last_run():
     try:
         with open(LAST_RUN_FILE, "r") as f:
@@ -58,104 +77,99 @@ def extrair_data(entry):
         return datetime(*entry.published_parsed[:6], tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo("Atlantic/Cape_Verde"))
     return None
 
+# ============================================================
+# COLETA DE NOTÍCIAS (MÚLTIPLOS FEEDS)
+# ============================================================
 def coletar_noticias():
     ultima = load_last_run()
     agora = datetime.now(ZoneInfo("Atlantic/Cape_Verde"))
-    novas = []
+    todas = []
+    links_vistos = set()
     maior_data = ultima
 
-    feed = feedparser.parse(GOOGLE_NEWS_URL, agent="Mozilla/5.0")
-    for entry in feed.entries:
-        pub = extrair_data(entry)
-        if not pub or pub <= ultima:
+    for feed_info in FEEDS:
+        url = feed_info["url"]
+        nome_fonte = feed_info["nome"]
+        print(f"📡 A processar {nome_fonte}...")
+        try:
+            feed = feedparser.parse(url, agent="Mozilla/5.0")
+        except Exception as e:
+            print(f"   ❌ Erro ao aceder: {e}")
             continue
-        if pub > maior_data:
-            maior_data = pub
 
-        titulo = entry.get('title', 'Sem título')
-        resumo_raw = entry.get('summary', '')
-        if resumo_raw:
-            resumo_limpo = limpar_html(resumo_raw)[:200]
-        else:
-            resumo_limpo = titulo[:200]
+        for entry in feed.entries:
+            pub = extrair_data(entry)
+            if pub is None:
+                continue
+            if pub <= ultima:
+                continue
+            if pub > maior_data:
+                maior_data = pub
 
-        link = entry.get('link', '')
-        data_str = pub.strftime("%d/%m/%Y %H:%M")
-        categoria = classificar_titulo(titulo, resumo_limpo)
+            titulo = entry.get('title', 'Sem título')
+            link = entry.get('link', '')
+            if link in links_vistos:
+                continue
+            links_vistos.add(link)
 
-        novas.append({
-            "categoria": categoria,
-            "data": pub,
-            "data_str": data_str,
-            "titulo": titulo,
-            "link": link
-        })
+            resumo_raw = entry.get('summary', '')
+            if resumo_raw:
+                resumo_limpo = limpar_html(resumo_raw)[:300]
+            else:
+                resumo_limpo = titulo[:200]
+
+            categoria = classificar_titulo(titulo, resumo_limpo)
+            data_str = pub.strftime("%d/%m/%Y %H:%M")
+
+            todas.append({
+                "categoria": categoria,
+                "data": pub,
+                "data_str": data_str,
+                "titulo": titulo,
+                "link": link,
+                "fonte": nome_fonte
+            })
+            print(f"   ✅ {pub.strftime('%d/%m %H:%M')} - {titulo[:60]}...")
+
     save_last_run(maior_data if maior_data > ultima else agora)
-    return novas
+    return todas
 
+# ============================================================
+# ENVIO DE E-MAIL (MESMA FORMATAÇÃO)
+# ============================================================
 def enviar_email(noticias):
     if not noticias:
         print("Nenhuma notícia nova.")
         return
 
+    # Ordenar: por categoria (A-Z) e dentro por data (mais recente primeiro)
     noticias_ordenadas = sorted(noticias, key=lambda x: x["data"], reverse=True)
     noticias_ordenadas = sorted(noticias_ordenadas, key=lambda x: x["categoria"])
 
     assunto = f"Notícias de Cabo Verde - {datetime.now().strftime('%d/%m/%Y')}"
     data_hoje = datetime.now().strftime("%d/%m/%Y")
 
-    # Estilo com Categoria reduzida para 16% (80% do tamanho anterior de 20%)
     style = """
     <style>
-        .news-table {
-            border-collapse: collapse;
-            width: 100%;
-        }
-        .news-table th, .news-table td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            vertical-align: top;
-        }
-        .news-table th {
-            background-color: #f0f0f0;
-            text-align: left;
-        }
-        .col-categoria {
-            width: 16%;
-        }
-        .col-data {
-            width: 12%;
-            white-space: nowrap;
-            min-width: 105px;
-        }
-        .col-titulo {
-            width: 72%;
-            word-wrap: break-word;
-            white-space: normal;
-        }
+        .news-table { border-collapse: collapse; width: 100%; }
+        .news-table th, .news-table td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+        .news-table th { background-color: #f0f0f0; text-align: left; }
+        .col-categoria { width: 16%; }
+        .col-data { width: 12%; white-space: nowrap; min-width: 105px; }
+        .col-titulo { width: 72%; word-wrap: break-word; white-space: normal; }
     </style>
     """
 
     introducao = """
-    <p><strong>Notícias de Cabo Verde</strong> é um projeto IA da autoria de <strong>Rui Sanches (drbadiodefora)</strong> que consiste em recolher notícias ao redor do mundo sobre Cabo Verde e enviar ao destinatário por ordem de assunto e data, diariamente às 6h local.</p>
+    <p><strong>Notícias de Cabo Verde</strong> é um projeto IA da autoria de <strong>Rui Sanches (drbadiodefora)</strong> que consiste em recolher e ordenar notícias em todo o mundo sobre Cabo Verde e enviar por email ao destinatário por ordem de assunto e data.</p>
     """
 
     html_parts = [
-        "<!DOCTYPE html>",
-        "<html>",
-        "<head><meta charset='UTF-8'>",
-        style,
-        "</head>",
-        "<body>",
-        f"<h2>🌍 Notícias de Cabo Verde</h2>",
-        introducao,
+        "<!DOCTYPE html>", "<html>", "<head><meta charset='UTF-8'>", style, "</head>", "<body>",
+        f"<h2>🌍 Notícias de Cabo Verde</h2>", introducao,
         f"<p><strong>{len(noticias)}</strong> notícia(s) nova(s) – {data_hoje}</p>",
         '<table class="news-table">',
-        '<tr>',
-        '<th class="col-categoria">Categoria</th>',
-        '<th class="col-data">Data</th>',
-        '<th class="col-titulo">Título</th>',
-        '</tr>'
+        '<tr><th class="col-categoria">Categoria</th><th class="col-data">Data</th><th class="col-titulo">Título</th></tr>'
     ]
 
     for n in noticias_ordenadas:
@@ -163,28 +177,16 @@ def enviar_email(noticias):
         data_str = n['data_str']
         titulo_esc = html_escape.escape(n['titulo'])
         link_esc = html_escape.escape(n['link'])
-        html_parts.append(f"<tr>\n")
-        html_parts.append(f"<td class='col-categoria'>{cat_esc}</td>\n")
-        html_parts.append(f"<td class='col-data'>{data_str}</td>\n")
-        html_parts.append(f"<td class='col-titulo'><a href='{link_esc}'>{titulo_esc}</a></td>\n")
-        html_parts.append(f"</tr>\n")
+        html_parts.append(f"<tr><td class='col-categoria'>{cat_esc}</td><td class='col-data'>{data_str}</td><td class='col-titulo'><a href='{link_esc}'>{titulo_esc}</a></td></tr>")
 
-    html_parts.append("</table>")
-    html_parts.append("<p>Rui Sanches &copy; 2026 - todos os direitos reservados.</p>")
-    html_parts.append("</body></html>")
-
+    html_parts.append("<table><p>Rui Sanches &copy; 2026 - todos os direitos reservados.</p></body></html>")
     html_final = "\n".join(html_parts)
 
     try:
         resp = requests.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-            json={
-                "from": "onboarding@resend.dev",
-                "to": [EMAIL_TO],
-                "subject": assunto,
-                "html": html_final
-            }
+            json={"from": "onboarding@resend.dev", "to": [EMAIL_TO], "subject": assunto, "html": html_final}
         )
         if resp.status_code == 200:
             print(f"✅ E‑mail enviado com {len(noticias)} notícias!")
